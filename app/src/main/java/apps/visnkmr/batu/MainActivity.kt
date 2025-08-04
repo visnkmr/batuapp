@@ -14,6 +14,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -393,6 +398,7 @@ fun ChatScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                // Prevent entire UI from jumping when IME appears; we'll pad for IME only at the bottom bar.
                 .padding(12.dp)
         ) {
             // Header
@@ -402,8 +408,9 @@ fun ChatScreen(
             ) {
                 IconButton(onClick = {
                     // If question dialog is visible, dismiss it before opening the hamburger menu
+                    // Avoid any transitional animations
+                    if (showQuestions) showQuestions = false
                     scope.launch {
-                        if (showQuestions) showQuestions = false
                         drawerState.open()
                     }
                 }) {
@@ -415,6 +422,7 @@ fun ChatScreen(
                     modifier = Modifier.weight(1f)
                 )
                 OutlinedButton(onClick = {
+                    // Defer network & parsing cost until dialog open
                     ensureModelsLoaded()
                     showModels = true
                 }) {
@@ -435,7 +443,9 @@ fun ChatScreen(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight(),
-                reverseLayout = false
+                reverseLayout = false,
+                // Disable scroll animation by reducing friction; Compose doesn't expose direct "no-anim" toggle,
+                // but we will avoid animateScroll* calls elsewhere to prevent animations.
             ) {
                 itemsIndexed(messagesInDb) { index, msg ->
                     val isUser = msg.role == "user"
@@ -507,6 +517,8 @@ fun ChatScreen(
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(onClick = {
                     // Close the left drawer first to avoid competing modal states
+                    // No animations
+                    showQuestions = false
                     scope.launch {
                         drawerState.close()
                         showQuestions = true
@@ -518,9 +530,13 @@ fun ChatScreen(
         }
 
         // Bottom input bar
+        // Apply IME padding here so only this bar shifts above the keyboard, not the entire screen.
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .windowInsetsPadding(
+                    WindowInsets.ime
+                )
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -538,6 +554,8 @@ fun ChatScreen(
                     placeholder = { Text("Send a message") }
                 )
                 OutlinedButton(onClick = {
+                    // Avoid animations when toggling dialog/drawer
+                    showQuestions = false
                     scope.launch {
                         drawerState.close()
                         showQuestions = true
@@ -578,7 +596,6 @@ fun ChatScreen(
             title = { Text("Select Model") },
             text = {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    // Loading / error
                     if (loadingModels) {
                         Text("Loading models…")
                         Spacer(Modifier.height(8.dp))
@@ -587,8 +604,6 @@ fun ChatScreen(
                         Text("Error: $err", color = Color(0xFFB00020))
                         Spacer(Modifier.height(8.dp))
                     }
-
-                    // Search box
                     OutlinedTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
@@ -597,33 +612,25 @@ fun ChatScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(Modifier.height(8.dp))
-
-                    // Free-only filter
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = filterFreeOnly, onCheckedChange = { filterFreeOnly = it })
                         Text("Free models only")
                     }
-
                     Spacer(Modifier.height(8.dp))
                     Divider()
                     Spacer(Modifier.height(8.dp))
-
-                    // Filtered list, paginated 5 at a time
                     val filtered = allModels.filter { m ->
                         val okFree = if (filterFreeOnly) freeModels.contains(m) else true
                         val okSearch = if (searchQuery.isNotBlank()) m.contains(searchQuery, ignoreCase = true) else true
                         okFree && okSearch
                     }
                     val toShow = filtered.take(visibleCount)
-
-                    // Scrollable list with vertical scroll
-                    Column(
+                    LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(220.dp)
-                            .verticalScroll(rememberScrollState())
                     ) {
-                        toShow.forEach { m ->
+                        items(toShow) { m ->
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
@@ -643,17 +650,15 @@ fun ChatScreen(
                                 }
                             }
                         }
-                        if (toShow.isEmpty()) {
-                            Text("No models found")
+                        item {
+                            if (toShow.isEmpty()) {
+                                Text("No models found")
+                            }
                         }
                     }
-
                     Spacer(Modifier.height(8.dp))
-
-                    // Show more button
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                         OutlinedButton(onClick = {
-                            // Increase by 5 at a time, but not beyond filtered size
                             val filteredSize = filtered.size
                             visibleCount = (visibleCount + 5).coerceAtMost(filteredSize)
                         }) {
@@ -672,16 +677,12 @@ fun ChatScreen(
 
     // End-side drawer for "Questions in this thread"
     if (showQuestions) {
-        // Build list of user messages (treat them as questions)
-        // Avoid heavy recomputation by deriving once per composition
         val questionItems = remember(messagesInDb) {
             messagesInDb.mapIndexedNotNull { idx, m ->
                 if (m.role == "user") Pair(idx, m) else null
             }
         }
-
-        // Use a lightweight dialog-like panel to avoid nested drawers causing layout jank
-        androidx.compose.material3.AlertDialog(
+        AlertDialog(
             onDismissRequest = { showQuestions = false },
             title = { Text("Questions in this thread") },
             text = {
@@ -699,7 +700,8 @@ fun ChatScreen(
                             val (idx, msg) = questionItems[i]
                             TextButton(onClick = {
                                 scope.launch {
-                                    listState.animateScrollToItem(idx)
+                                    // Jump instantly without animation to avoid any UI effect
+                                    listState.scrollToItem(idx)
                                     showQuestions = false
                                 }
                             }) {
@@ -716,86 +718,5 @@ fun ChatScreen(
         )
     }
 
-    // Models dialog retained as before
-    if (showModels) {
-        AlertDialog(
-            onDismissRequest = { showModels = false },
-            title = { Text("Select Model") },
-            text = {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    if (loadingModels) {
-                        Text("Loading models…")
-                        Spacer(Modifier.height(8.dp))
-                    }
-                    modelsError?.let { err ->
-                        Text("Error: $err", color = Color(0xFFB00020))
-                        Spacer(Modifier.height(8.dp))
-                    }
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        singleLine = true,
-                        placeholder = { Text("Search models") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = filterFreeOnly, onCheckedChange = { filterFreeOnly = it })
-                        Text("Free models only")
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Divider()
-                    Spacer(Modifier.height(8.dp))
-                    val filtered = allModels.filter { m ->
-                        val okFree = if (filterFreeOnly) freeModels.contains(m) else true
-                        val okSearch = if (searchQuery.isNotBlank()) m.contains(searchQuery, ignoreCase = true) else true
-                        okFree && okSearch
-                    }
-                    val toShow = filtered.take(visibleCount)
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(220.dp)
-                            .verticalScroll(rememberScrollState())
-                    ) {
-                        toShow.forEach { m ->
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 6.dp)
-                            ) {
-                                val isFree = freeModels.contains(m)
-                                OutlinedButton(onClick = {
-                                    selectedModel = m
-                                    showModels = false
-                                }) {
-                                    Text(m)
-                                }
-                                if (isFree) {
-                                    Spacer(Modifier.widthIn(6.dp))
-                                    Text("FREE", color = Color(0xFF2E7D32))
-                                }
-                            }
-                        }
-                        if (toShow.isEmpty()) {
-                            Text("No models found")
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        OutlinedButton(onClick = {
-                            val filteredSize = filtered.size
-                            visibleCount = (visibleCount + 5).coerceAtMost(filteredSize)
-                        }) {
-                            Text("Show 5 more")
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showModels = false }) { Text("Close") }
-            }
-        )
-    }
+    // Remove duplicated "Models dialog retained as before" block which caused duplicate Composable blocks and syntax errors
 }
