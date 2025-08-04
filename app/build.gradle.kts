@@ -62,4 +62,7 @@ dependencies {
 
     // JSON
     implementation("org.json:json:20240303")
+
+    // Remove unused transitive modules if any sneak in (belt-and-suspenders)
+    // NOTE: Do NOT exclude org.jetbrains:annotations; Kotlin compiler and KAPT need it.
 }

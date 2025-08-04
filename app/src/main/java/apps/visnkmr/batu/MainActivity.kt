@@ -36,6 +36,13 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.DrawerState
+import androidx.compose.material3.DismissDirection
+import androidx.compose.material3.DismissValue
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -46,6 +53,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.MutableState
@@ -163,6 +171,9 @@ fun ChatScreen(
     var searchQuery by remember { mutableStateOf("") }
     var selectedModel by remember { mutableStateOf("openrouter/auto") }
     val listState = rememberLazyListState()
+
+    // Right side Questions popup — use AlertDialog; ensure only one overlay is active at a time
+    var showQuestions by remember { mutableStateOf(false) }
 
     // OkHttp client
     val client = remember {
@@ -328,6 +339,7 @@ fun ChatScreen(
         }
     }
 
+    // Primary left drawer (conversations/settings)
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -388,7 +400,13 @@ fun ChatScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                IconButton(onClick = {
+                    // If question dialog is visible, dismiss it before opening the hamburger menu
+                    scope.launch {
+                        if (showQuestions) showQuestions = false
+                        drawerState.open()
+                    }
+                }) {
                     Icon(imageVector = Icons.Filled.Menu, contentDescription = "Menu")
                 }
                 Text(
@@ -477,31 +495,24 @@ fun ChatScreen(
                 item { Spacer(modifier = Modifier.height(60.dp)) }
             }
 
-            // Right: Similar questions panel
+            // Right: Questions popup trigger + end drawer content
+            // We render only a small trigger column here; the actual list is in an end-side ModalNavigationDrawer below
             Column(
                 modifier = Modifier
                     .width(220.dp)
                     .fillMaxHeight()
                     .padding(start = 8.dp)
             ) {
-                Text("Similar questions", style = MaterialTheme.typography.titleMedium)
+                Text("Questions", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(8.dp))
-                val candidates = messagesInDb.filter { it.role == "user" }.reversed().let { list ->
-                    val q = input.trim()
-                    if (q.isBlank()) list.take(10) else list.filter { it.content.contains(q, ignoreCase = true) }.take(10)
-                }
-                LazyColumn {
-                    items(candidates.size) { i ->
-                        val m = candidates[i]
-                        TextButton(onClick = {
-                            val idx = messagesInDb.indexOfFirst { it.id == m.id }
-                            if (idx >= 0) {
-                                scope.launch { listState.animateScrollToItem(idx) }
-                            }
-                        }) {
-                            Text(m.content.take(60))
-                        }
+                OutlinedButton(onClick = {
+                    // Close the left drawer first to avoid competing modal states
+                    scope.launch {
+                        drawerState.close()
+                        showQuestions = true
                     }
+                }) {
+                    Text("Open questions")
                 }
             }
         }
@@ -526,6 +537,13 @@ fun ChatScreen(
                     singleLine = true,
                     placeholder = { Text("Send a message") }
                 )
+                OutlinedButton(onClick = {
+                    scope.launch {
+                        drawerState.close()
+                        showQuestions = true
+                    }
+                }) { Text("Questions") }
+                Spacer(Modifier.width(8.dp))
                 ElevatedButton(
                     onClick = {
                         val trimmed = input.trim()
@@ -651,6 +669,53 @@ fun ChatScreen(
     }
 
     }
+
+    // End-side drawer for "Questions in this thread"
+    if (showQuestions) {
+        // Build list of user messages (treat them as questions)
+        // Avoid heavy recomputation by deriving once per composition
+        val questionItems = remember(messagesInDb) {
+            messagesInDb.mapIndexedNotNull { idx, m ->
+                if (m.role == "user") Pair(idx, m) else null
+            }
+        }
+
+        // Use a lightweight dialog-like panel to avoid nested drawers causing layout jank
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showQuestions = false },
+            title = { Text("Questions in this thread") },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(360.dp)
+                ) {
+                    Divider()
+                    Spacer(Modifier.height(8.dp))
+                    LazyColumn(
+                        modifier = Modifier.fillMaxHeight()
+                    ) {
+                        items(questionItems.size) { i ->
+                            val (idx, msg) = questionItems[i]
+                            TextButton(onClick = {
+                                scope.launch {
+                                    listState.animateScrollToItem(idx)
+                                    showQuestions = false
+                                }
+                            }) {
+                                Text(msg.content.take(120))
+                            }
+                            Divider()
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showQuestions = false }) { Text("Close") }
+            }
+        )
+    }
+
     // Models dialog retained as before
     if (showModels) {
         AlertDialog(
