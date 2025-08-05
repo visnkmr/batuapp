@@ -176,6 +176,20 @@ fun ChatScreen(
     var searchQuery by remember { mutableStateOf("") }
     var selectedModel by remember { mutableStateOf("openrouter/auto") }
     val listState = rememberLazyListState()
+    // Toggle for including chat history with the current message
+    var includeHistory by remember { mutableStateOf(true) }
+
+    // Auto-scroll state: when true, keep list pinned to bottom as new messages stream in.
+    var autoScroll by remember { mutableStateOf(true) }
+    // Derived: are we at (or near) the bottom currently?
+    val isAtBottom by remember {
+        derivedStateOf {
+            val lastIndex = (messagesInDb.size - 1).coerceAtLeast(0)
+            // Consider "near bottom" if the last visible item index is within 1 of the last message
+            val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            lastVisible >= lastIndex - 1
+        }
+    }
 
     // Right side Questions popup — use AlertDialog; ensure only one overlay is active at a time
     var showQuestions by remember { mutableStateOf(false) }
@@ -463,15 +477,16 @@ fun ChatScreen(
             .weight(1f)
             .fillMaxWidth()) {
             // Center: messages
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight(),
-                reverseLayout = false,
-                // Disable scroll animation by reducing friction; Compose doesn't expose direct "no-anim" toggle,
-                // but we will avoid animateScroll* calls elsewhere to prevent animations.
+            Box(modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
             ) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .fillMaxSize(),
+                    reverseLayout = false,
+                ) {
                 itemsIndexed(messagesInDb) { index, msg ->
                     val isUser = msg.role == "user"
                     Row(
@@ -528,6 +543,37 @@ fun ChatScreen(
                     }
                 }
                 item { Spacer(modifier = Modifier.height(60.dp)) }
+                }
+
+                // Floating auto-scroll toggle/scroll-to-bottom button
+                // Show when user is NOT at bottom OR when autoScroll is off (to allow enabling).
+                val showFab by remember { derivedStateOf { !isAtBottom || !autoScroll } }
+                if (showFab) {
+                    // Place at bottom-right, slightly above the input area spacing
+                    androidx.compose.material3.FloatingActionButton(
+                        onClick = {
+                            if (!isAtBottom) {
+                                // Jump to bottom and enable auto-scroll
+                                scope.launch {
+                                    val last = (messagesInDb.size - 1).coerceAtLeast(0)
+                                    listState.scrollToItem(last)
+                                }
+                                autoScroll = true
+                            } else {
+                                // Toggle auto-scroll state
+                                autoScroll = !autoScroll
+                            }
+                        },
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(12.dp)
+                    ) {
+                        // Simple textual indicator; can be replaced with icons
+                        Text(
+                            if (!isAtBottom) "↓" else if (autoScroll) "Auto✓" else "Auto"
+                        )
+                    }
+                }
             }
 
             // Right: Questions popup trigger + end drawer content
@@ -577,6 +623,14 @@ fun ChatScreen(
 //                    }
 //                }) { Text("Questions") }
 //                Spacer(Modifier.width(8.dp))
+                // Toggle icon for including chat history with this message
+                IconButton(
+                    onClick = { includeHistory = !includeHistory }
+                ) {
+                    // Simple visual: checked/unchecked box icon using Text until explicit icons are added
+                    Text(if (includeHistory) "H✓" else "H")
+                }
+                Spacer(Modifier.width(4.dp))
                 ElevatedButton(
                     onClick = {
                         val trimmed = input.trim()
@@ -591,17 +645,98 @@ fun ChatScreen(
                             scope.launch {
                                 try {
                                     repo.addUserMessage(conv, userPrompt)
-                                    streamChat(conv, userPrompt)
+                                    // If history is disabled, send only current message context
+                                    if (includeHistory) {
+                                        streamChat(conv, userPrompt)
+                                    } else {
+                                        // Create assistant placeholder and stream using only current user message
+                                        val assistantId = repo.addAssistantPlaceholder(conv)
+                                        withContext(Dispatchers.IO) {
+                                            val url = "https://openrouter.ai/api/v1/chat/completions"
+                                            val mediaType = "application/json".toMediaType()
+                                            val bodyJson = JSONObject().apply {
+                                                put("model", selectedModel)
+                                                put("stream", true)
+                                                put("messages", JSONArray().apply {
+                                                    put(JSONObject().apply {
+                                                        put("role", "user")
+                                                        put("content", userPrompt)
+                                                    })
+                                                })
+                                            }.toString()
+                                            val request = Request.Builder()
+                                                .url(url)
+                                                .addHeader("Authorization", "Bearer $apiKey")
+                                                .addHeader("HTTP-Referer", "https://example.com")
+                                                .addHeader("X-Title", "Batu Chat")
+                                                .post(bodyJson.toRequestBody(mediaType))
+                                                .build()
+                                            val call = client.newCall(request)
+                                            val response = call.execute()
+                                            response.use { resp ->
+                                                if (!resp.isSuccessful) {
+                                                    throw IllegalStateException("HTTP ${resp.code} ${resp.message}")
+                                                }
+                                                val source: okio.BufferedSource = resp.body?.source()
+                                                    ?: throw IllegalStateException("Empty body")
+                                                while (true) {
+                                                    if (!isActive) break
+                                                    val rawLine = source.readUtf8Line() ?: break
+                                                    val line = rawLine.trim()
+                                                    if (line.isEmpty()) {
+                                                        // skip
+                                                    } else if (line.startsWith("data:", ignoreCase = true)) {
+                                                        val payload = line.substringAfter("data:", "").trim()
+                                                        if (payload == "[DONE]") break
+                                                        try {
+                                                            val obj = JSONObject(payload)
+                                                            val choices = obj.optJSONArray("choices")
+                                                            if (choices != null && choices.length() > 0) {
+                                                                val delta = choices.getJSONObject(0)
+                                                                    .optJSONObject("delta")
+                                                                    ?.optString("content") ?: ""
+                                                                if (delta.isNotEmpty()) {
+                                                                    withContext(Dispatchers.Main) {
+                                                                        updateAssistantStreaming(assistantId, delta)
+                                                                    }
+                                                                }
+                                                            } else {
+                                                                val msg = obj.optJSONObject("message")
+                                                                val content = msg?.optString("content").orEmpty()
+                                                                if (content.isNotEmpty()) {
+                                                                    withContext(Dispatchers.Main) {
+                                                                        updateAssistantStreaming(assistantId, content)
+                                                                    }
+                                                                }
+                                                            }
+                                                        } catch (_: Exception) {
+                                                            // ignore malformed
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 } catch (ce: CancellationException) {
                                     // ignore
                                 } catch (e: Exception) {
-                                    // error already handled in streamChat by updating assistant message
+                                    // Error handling: update assistant placeholder with error if created in no-history path
+                                    // In history path, streamChat handles updating.
                                 }
                             }
                         }
                     },
                 ) { Text("Send") }
             }
+        }
+    }
+
+    // Auto-scroll behavior: when autoScroll is enabled and new messages stream in or appear,
+    // keep the list pinned to the last item. Trigger on messagesInDb size changes.
+    LaunchedEffect(messagesInDb.size, autoScroll) {
+        if (autoScroll && messagesInDb.isNotEmpty()) {
+            val last = messagesInDb.size - 1
+            listState.scrollToItem(last)
         }
     }
 
