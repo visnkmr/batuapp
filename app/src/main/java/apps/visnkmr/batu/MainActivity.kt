@@ -70,6 +70,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import apps.visnkmr.batu.ui.theme.TVCalendarTheme
 import androidx.security.crypto.EncryptedSharedPreferences
@@ -421,6 +422,14 @@ fun ChatScreen(
                     style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.weight(1f)
                 )
+
+            }
+//            Spacer(Modifier.height(8.dp))
+//            Divider()
+            Row (
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 OutlinedButton(onClick = {
                     // Defer network & parsing cost until dialog open
                     ensureModelsLoaded()
@@ -432,11 +441,24 @@ fun ChatScreen(
                 ElevatedButton(onClick = {
                     scope.launch { selectedConversationId = repo.newConversation() }
                 }) { Text("New chat") }
+                OutlinedButton(onClick = {
+                    // Close the left drawer first to avoid competing modal states
+                    // No animations
+                    showQuestions = false
+                    scope.launch {
+                        drawerState.close()
+                        showQuestions = true
+                    }
+                }) {
+                    Text("questions")
+                }
             }
 
-        Spacer(Modifier.height(8.dp))
+//        Spacer(Modifier.height(8.dp))
 
-        Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+        Row(modifier = Modifier
+            .weight(1f)
+            .fillMaxWidth()) {
             // Center: messages
             LazyColumn(
                 state = listState,
@@ -507,26 +529,16 @@ fun ChatScreen(
 
             // Right: Questions popup trigger + end drawer content
             // We render only a small trigger column here; the actual list is in an end-side ModalNavigationDrawer below
-            Column(
-                modifier = Modifier
-                    .width(220.dp)
-                    .fillMaxHeight()
-                    .padding(start = 8.dp)
-            ) {
-                Text("Questions", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(onClick = {
-                    // Close the left drawer first to avoid competing modal states
-                    // No animations
-                    showQuestions = false
-                    scope.launch {
-                        drawerState.close()
-                        showQuestions = true
-                    }
-                }) {
-                    Text("Open questions")
-                }
-            }
+//            Column(
+//                modifier = Modifier
+//                    .width(220.dp)
+//                    .fillMaxHeight()
+//                    .padding(start = 8.dp)
+//            ) {
+//                Text("Questions", style = MaterialTheme.typography.titleMedium)
+//                Spacer(Modifier.height(8.dp))
+//
+//            }
         }
 
         // Bottom input bar
@@ -553,15 +565,15 @@ fun ChatScreen(
                     singleLine = true,
                     placeholder = { Text("Send a message") }
                 )
-                OutlinedButton(onClick = {
-                    // Avoid animations when toggling dialog/drawer
-                    showQuestions = false
-                    scope.launch {
-                        drawerState.close()
-                        showQuestions = true
-                    }
-                }) { Text("Questions") }
-                Spacer(Modifier.width(8.dp))
+//                OutlinedButton(onClick = {
+//                    // Avoid animations when toggling dialog/drawer
+//                    showQuestions = false
+//                    scope.launch {
+//                        drawerState.close()
+//                        showQuestions = true
+//                    }
+//                }) { Text("Questions") }
+//                Spacer(Modifier.width(8.dp))
                 ElevatedButton(
                     onClick = {
                         val trimmed = input.trim()
