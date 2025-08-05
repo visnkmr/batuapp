@@ -42,7 +42,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DismissDirection
 import androidx.compose.material3.DismissValue
@@ -349,12 +348,15 @@ fun ChatScreen(
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            Column(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .width(280.dp)
-                    .padding(12.dp)
+            ModalDrawerSheet(
             ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width(280.dp)
+                        .background(MaterialTheme.colorScheme.surface)
+                        .padding(12.dp)
+                ) {
                 Text("Conversations", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(8.dp))
                 ElevatedButton(onClick = {
@@ -392,6 +394,7 @@ fun ChatScreen(
                 Spacer(Modifier.height(12.dp))
                 OutlinedButton(onClick = onToggleDark) {
                     Text(if (dark) "Switch to Light" else "Switch to Dark")
+                }
                 }
             }
         }
