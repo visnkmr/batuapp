@@ -54,6 +54,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
@@ -138,6 +140,7 @@ fun ChatScreen(
     repo: ChatRepository
 ) {
     val scope = rememberCoroutineScope()
+    var actionsExpanded by remember { mutableStateOf(false) }
 
     // Drawer state and API key moved into drawer
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -443,52 +446,60 @@ fun ChatScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                IconButton(onClick = {
-                    // If question dialog is visible, dismiss it before opening the hamburger menu
-                    // Avoid any transitional animations
+                 // Drawer menu
+                 IconButton(onClick = {
                     if (showQuestions) showQuestions = false
-                    scope.launch {
-                        drawerState.open()
-                    }
+                    scope.launch { drawerState.open() }
                 }) {
                     Icon(imageVector = Icons.Filled.Menu, contentDescription = "Menu")
                 }
+                Spacer(Modifier.width(8.dp))
+                // App title centered with weight
                 Text(
                     text = "Batu Chat",
                     style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.weight(1f)
                 )
-
+                // Actions dropdown trigger at old model-button position
+                Box {
+                    IconButton(onClick = { actionsExpanded = !actionsExpanded }) {
+                        Text("🤖")
+                    }
+                    DropdownMenu(expanded = actionsExpanded, onDismissRequest = { actionsExpanded = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Models") },
+                            onClick = {
+                                actionsExpanded = false
+                                ensureModelsLoaded()
+                                showModels = true
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("New chat") },
+                            onClick = {
+                                actionsExpanded = false
+                                scope.launch { selectedConversationId = repo.newConversation() }
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Questions") },
+                            onClick = {
+                                actionsExpanded = false
+                                showQuestions = false
+                                scope.launch {
+                                    drawerState.close()
+                                    showQuestions = true
+                                }
+                            }
+                        )
+                    }
+                }
+               
             }
 //            Spacer(Modifier.height(8.dp))
 //            Divider()
-            Row (
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                IconButton(onClick = {
-                    // Defer network & parsing cost until dialog open
-                    ensureModelsLoaded()
-                    showModels = true
-                }) {
-                    Text("Models")
-                }
-                Spacer(Modifier.width(8.dp))
-                IconButton(onClick = {
-                    scope.launch { selectedConversationId = repo.newConversation() }
-                }) { Text("＋") }
-                IconButton(onClick = {
-                    // Close the left drawer first to avoid competing modal states
-                    // No animations
-                    showQuestions = false
-                    scope.launch {
-                        drawerState.close()
-                        showQuestions = true
-                    }
-                }) {
-                    Text("❓")
-                }
-            }
+            // Secondary quick-actions row removed; actions now live in the dropdown
+            Spacer(Modifier.height(0.dp))
 
 //        Spacer(Modifier.height(8.dp))
 
