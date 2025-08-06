@@ -373,11 +373,11 @@ fun ChatScreen(
                 ) {
                 Text("Conversations", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(8.dp))
-                ElevatedButton(onClick = {
+                IconButton(onClick = {
                     scope.launch {
                         selectedConversationId = repo.newConversation()
                     }
-                }) { Text("New chat") }
+                }) { Text("＋") }
                 Spacer(Modifier.height(8.dp))
                 Divider()
                 Spacer(Modifier.height(8.dp))
@@ -394,20 +394,39 @@ fun ChatScreen(
                 Spacer(Modifier.height(12.dp))
                 Text("Settings", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = apiKey,
-                    onValueChange = { apiKey = it },
-                    placeholder = { Text("sk-or-v1-...") },
-                    singleLine = true,
-                    label = { Text("OpenRouter API Key") }
-                )
-                Spacer(Modifier.height(6.dp))
-                OutlinedButton(onClick = {
-                    prefs.edit().putString("openrouter_api_key", apiKey.trim()).apply()
-                }) { Text("Save API Key") }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        value = apiKey,
+                        onValueChange = { apiKey = it },
+                        placeholder = { Text("sk-or-v1-...") },
+                        singleLine = true,
+                        label = { Text("OpenRouter API Key") },
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    IconButton(
+                        onClick = {
+                            prefs.edit().putString("openrouter_api_key", apiKey.trim()).apply()
+                        }
+                    ) {
+                        Text("💾")
+                    }
+                }
+                
+                
                 Spacer(Modifier.height(12.dp))
-                OutlinedButton(onClick = onToggleDark) {
-                    Text(if (dark) "Switch to Light" else "Switch to Dark")
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                ) {
+                    IconButton(onClick = onToggleDark) {
+                        Text(if (dark) "☀ Light" else "🌙 dark")
+                    }
                 }
                 }
             }
@@ -447,18 +466,18 @@ fun ChatScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                OutlinedButton(onClick = {
+                IconButton(onClick = {
                     // Defer network & parsing cost until dialog open
                     ensureModelsLoaded()
                     showModels = true
                 }) {
-                    Text(selectedModel.take(22) + if (selectedModel.length > 22) "…" else "")
+                    Text("Models")
                 }
                 Spacer(Modifier.width(8.dp))
-                ElevatedButton(onClick = {
+                IconButton(onClick = {
                     scope.launch { selectedConversationId = repo.newConversation() }
-                }) { Text("New chat") }
-                OutlinedButton(onClick = {
+                }) { Text("＋") }
+                IconButton(onClick = {
                     // Close the left drawer first to avoid competing modal states
                     // No animations
                     showQuestions = false
@@ -467,7 +486,7 @@ fun ChatScreen(
                         showQuestions = true
                     }
                 }) {
-                    Text("questions")
+                    Text("❓")
                 }
             }
 
@@ -508,12 +527,12 @@ fun ChatScreen(
                             }
                             // Actions row
                             Row {
-                                TextButton(onClick = {
+                                IconButton(onClick = {
                                     val cb = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                     cb.setPrimaryClip(ClipData.newPlainText("message", msg.content))
-                                }) { Text("Copy") }
+                                }) { Text("⧉") }
                                 if (isUser) {
-                                    TextButton(onClick = {
+                                    IconButton(onClick = {
                                         // Resend same prompt in current conversation
                                         if (selectedConversationId != null) {
                                             scope.launch {
@@ -527,8 +546,8 @@ fun ChatScreen(
                                                 }
                                             }
                                         }
-                                    }) { Text("Resend") }
-                                    TextButton(onClick = {
+                                    }) { Text("↻") }
+                                    IconButton(onClick = {
                                         // Branch from this message
                                         scope.launch {
                                             val newId = repo.branchFromMessage(msg.id)
@@ -536,7 +555,7 @@ fun ChatScreen(
                                                 selectedConversationId = newId
                                             }
                                         }
-                                    }) { Text("Branch") }
+                                    }) { Text("⎘") }
                                 }
                             }
                         }
@@ -568,9 +587,8 @@ fun ChatScreen(
                             .align(Alignment.BottomEnd)
                             .padding(12.dp)
                     ) {
-                        // Simple textual indicator; can be replaced with icons
                         Text(
-                            if (!isAtBottom) "↓" else if (autoScroll) "Auto✓" else "Auto"
+                            if (!isAtBottom) "↓" else if (autoScroll) "✓" else "✕"
                         )
                     }
                 }
@@ -631,25 +649,23 @@ fun ChatScreen(
                     Text(if (includeHistory) "H✓" else "H")
                 }
                 Spacer(Modifier.width(4.dp))
-                ElevatedButton(
+                IconButton(
                     onClick = {
                         val trimmed = input.trim()
                         val conv = selectedConversationId
                         if (trimmed.isNotEmpty() && conv != null) {
                             if (apiKey.isBlank()) {
                                 scope.launch { drawerState.open() }
-                                return@ElevatedButton
+                                return@IconButton
                             }
                             val userPrompt = trimmed
                             input = ""
                             scope.launch {
                                 try {
                                     repo.addUserMessage(conv, userPrompt)
-                                    // If history is disabled, send only current message context
                                     if (includeHistory) {
                                         streamChat(conv, userPrompt)
                                     } else {
-                                        // Create assistant placeholder and stream using only current user message
                                         val assistantId = repo.addAssistantPlaceholder(conv)
                                         withContext(Dispatchers.IO) {
                                             val url = "https://openrouter.ai/api/v1/chat/completions"
@@ -720,13 +736,12 @@ fun ChatScreen(
                                 } catch (ce: CancellationException) {
                                     // ignore
                                 } catch (e: Exception) {
-                                    // Error handling: update assistant placeholder with error if created in no-history path
-                                    // In history path, streamChat handles updating.
+                                    // ignore
                                 }
                             }
                         }
                     },
-                ) { Text("Send") }
+                ) { Text("➤") }
             }
         }
     }
@@ -788,12 +803,14 @@ fun ChatScreen(
                                     .padding(vertical = 6.dp)
                             ) {
                                 val isFree = freeModels.contains(m)
-                                OutlinedButton(onClick = {
+                                IconButton(onClick = {
                                     selectedModel = m
                                     showModels = false
                                 }) {
-                                    Text(m)
+                                    Text("✓")
                                 }
+                                Spacer(Modifier.width(8.dp))
+                                Text(m, modifier = Modifier.weight(1f))
                                 if (isFree) {
                                     Spacer(Modifier.widthIn(6.dp))
                                     Text("FREE", color = Color(0xFF2E7D32))
@@ -808,17 +825,17 @@ fun ChatScreen(
                     }
                     Spacer(Modifier.height(8.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        OutlinedButton(onClick = {
+                        IconButton(onClick = {
                             val filteredSize = filtered.size
                             visibleCount = (visibleCount + 5).coerceAtMost(filteredSize)
                         }) {
-                            Text("Show 5 more")
+                            Text("＋5")
                         }
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showModels = false }) { Text("Close") }
+                IconButton(onClick = { showModels = false }) { Text("✕") }
             }
         )
     }
@@ -848,22 +865,23 @@ fun ChatScreen(
                     ) {
                         items(questionItems.size) { i ->
                             val (idx, msg) = questionItems[i]
-                            TextButton(onClick = {
+                            IconButton(onClick = {
                                 scope.launch {
                                     // Jump instantly without animation to avoid any UI effect
                                     listState.scrollToItem(idx)
                                     showQuestions = false
                                 }
                             }) {
-                                Text(msg.content.take(120))
+                                Text("▶")
                             }
+                            Text(msg.content.take(120))
                             Divider()
                         }
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showQuestions = false }) { Text("Close") }
+                IconButton(onClick = { showQuestions = false }) { Text("✕") }
             }
         )
     }
