@@ -13,7 +13,11 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import apps.visnkmr.batu.ui.llmchat.BatuLlmChatScreen
+import apps.visnkmr.batu.ui.home.BatuHomeScreen
 
+object BatuHomeDestination {
+  const val route = "BatuHomeRoute"
+}
 object BatuLlmChatDestination {
   const val route = "BatuLlmChatRoute"
 }
@@ -49,11 +53,20 @@ fun BatuNavHost(
 
   NavHost(
     navController = navController,
-    startDestination = BatuLlmChatDestination.route,
+    startDestination = BatuHomeDestination.route,
     enterTransition = { EnterTransition.None },
     exitTransition = { ExitTransition.None },
     modifier = modifier
   ) {
+    composable(
+      route = BatuHomeDestination.route,
+      enterTransition = { EnterTransition.None },
+      exitTransition = { ExitTransition.None }
+    ) {
+      BatuHomeScreen(
+        onStartChatClicked = { navController.navigate(BatuLlmChatDestination.route) }
+      )
+    }
     composable(
       route = BatuLlmChatDestination.route,
       enterTransition = { slideEnter() },

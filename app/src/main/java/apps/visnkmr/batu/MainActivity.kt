@@ -111,14 +111,12 @@ class MainActivity : ComponentActivity() {
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )
 
-        // Initialize heavy singletons off the UI thread before composition.
+        // Minimal work before composition to improve apparent cold start.
         val appStartTs = System.currentTimeMillis()
         android.util.Log.d("BatuStartup", "onCreate start")
 
-        // Touch singletons early (optional warm-up); consumers should always fetch via ServiceLocator.
-        ServiceLocator.provideDatabase(this)
-        ServiceLocator.provideChatRepository(this)
-        ServiceLocator.provideOkHttpClient()
+        // NOTE: ServiceLocator warm-up moved out of launch path.
+        // Dependencies are lazily initialized on first use (e.g., when opening Chat).
 
         setContent {
             var dark by remember { mutableStateOf(true) }
