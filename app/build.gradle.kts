@@ -18,7 +18,7 @@ android {
 
     buildTypes {
         release {
-            // TEMP: disable code/resource shrinking to verify the Kotlin ICE isn't caused by R8/proguard
+            // Keep release shrinking enabled
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -27,12 +27,9 @@ android {
             )
         }
         debug {
-            isMinifyEnabled = true
-            isShrinkResources = true
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
+            // Disable shrinking in debug to speed up install/startup and remove R8 overhead
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
 

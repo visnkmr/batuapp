@@ -83,6 +83,7 @@ import apps.visnkmr.batu.ui.theme.BatuGalleryTheme
 import apps.visnkmr.batu.ui.navigation.BatuNavHost
 import apps.visnkmr.batu.data.AppDatabase
 import apps.visnkmr.batu.data.ChatRepository
+import apps.visnkmr.batu.di.ServiceLocator
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
@@ -110,21 +111,45 @@ class MainActivity : ComponentActivity() {
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )
 
+        // Initialize heavy singletons off the UI thread before composition.
+        val appStartTs = System.currentTimeMillis()
+        android.util.Log.d("BatuStartup", "onCreate start")
+
+        // Touch singletons early (optional warm-up); consumers should always fetch via ServiceLocator.
+        ServiceLocator.provideDatabase(this)
+        ServiceLocator.provideChatRepository(this)
+        ServiceLocator.provideOkHttpClient()
+
         setContent {
             var dark by remember { mutableStateOf(true) }
 
             // Wrap the app with Gallery-matching theme
             BatuGalleryTheme(useDarkTheme = dark) {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    // Set up Navigation matching Gallery structure (step 1: LLM Chat only)
+                    // Provide repo/db via simple holders to Composables without re-creating them.
                     val navController = rememberNavController()
+                    // Minimal root first: NavHost shows a lightweight BatuLlmChatScreen which lazy-loads chat state after conversation id is ready.
                     BatuNavHost(navController = navController)
                 }
+            }
+
+            // Trace after first composition returns
+            LaunchedEffect(Unit) {
+                android.util.Log.d(
+                    "BatuStartup",
+                    "First composition done, elapsed=" + (System.currentTimeMillis() - appStartTs) + "ms"
+                )
             }
         }
     }
 }
 
+/*
+  NOTE:
+  ChatScreen was the previous single-activity UI that initialized DB/repo and did network work inside composition.
+  We now keep DB/Repo creation in Activity.onCreate and route UI via NavHost to a lighter BatuLlmChatScreen that defers work.
+  Leaving ChatScreen here for reference, but it should not be the app entry point anymore.
+*/
 @Composable
 fun ChatScreen(
     context: Context,

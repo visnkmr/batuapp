@@ -1,7 +1,10 @@
 package apps.visnkmr.batu.ui.llmchat
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -29,7 +32,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.collectAsState
@@ -46,6 +48,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.focusable
 import apps.visnkmr.batu.data.AppDatabase
 import apps.visnkmr.batu.data.ChatRepository
+import apps.visnkmr.batu.di.ServiceLocator
 import apps.visnkmr.batu.ui.common.chat.ChatMessage
 import apps.visnkmr.batu.ui.common.chat.ChatMessageLoading
 import apps.visnkmr.batu.ui.common.chat.ChatMessageText
@@ -80,8 +83,7 @@ fun BatuLlmChatScreen(
 ) {
   val context = LocalContext.current
   val TAG = "BatuLlmChat"
-  val db = remember { AppDatabase.get(context) }
-  val repo = remember { ChatRepository(db.conversationDao(), db.messageDao()) }
+  val repo = remember { ServiceLocator.provideChatRepository(context) }
 
   var selectedConversationId by remember { mutableStateOf<Long?>(null) }
   val scope = rememberCoroutineScope()
@@ -93,6 +95,19 @@ fun BatuLlmChatScreen(
     }
   }
 
+  // Tiny placeholder for first frame to avoid mounting heavy UI until we have a conversation id.
+  if (selectedConversationId == null) {
+    androidx.compose.foundation.layout.Box(
+      modifier = Modifier
+        .fillMaxSize()
+        .padding(16.dp),
+      contentAlignment = androidx.compose.ui.Alignment.Center
+    ) {
+      androidx.compose.material3.Text("Loading…")
+    }
+    return
+  }
+
   // Simple ChatViewModel in-memory (UI state); DB remains the source of truth for history
   val chatVm = remember { ChatViewModel() }
   // Left drawer + menu state (mirrors MainActivity’s pattern)
@@ -100,6 +115,8 @@ fun BatuLlmChatScreen(
   var actionsExpanded by remember { mutableStateOf(false) }
   var showQuestions by remember { mutableStateOf(false) }
   var showModels by remember { mutableStateOf(false) }
+  var showAllConversations by remember { mutableStateOf(false) }
+  var convSearchQuery by remember { mutableStateOf("") }
   // Include history toggle next to input
   var includeHistory by remember { mutableStateOf(true) }
   // Auto-scroll state and detector
@@ -120,9 +137,12 @@ fun BatuLlmChatScreen(
   var apiKey by remember { mutableStateOf(prefs.getString("openrouter_api_key", "") ?: "") }
   var selectedModel by remember { mutableStateOf("openrouter/auto") }
 
-  // Conversations list in drawer
+  // Conversations list in drawer (show only last 5 in the drawer).
   val conversationsFlow = remember { repo.conversations() }
   val conversations by conversationsFlow.collectAsState(initial = emptyList())
+  val lastFiveConversations = remember(conversations) {
+    conversations.takeLast(5)
+  }
   val messagesFlow = remember(selectedConversationId) {
     if (selectedConversationId != null) repo.messages(selectedConversationId!!) else null
   }
@@ -138,11 +158,7 @@ fun BatuLlmChatScreen(
     }
   }
 
-  val client = remember {
-    OkHttpClient.Builder()
-      .retryOnConnectionFailure(true)
-      .build()
-  }
+  val client = remember { ServiceLocator.provideOkHttpClient() }
 
   // Simple model list fetcher (OpenRouter public list). Uses API key when present.
   fun parseFreeFlagFromName(name: String): Boolean {
@@ -375,7 +391,8 @@ fun BatuLlmChatScreen(
             HorizontalDivider()
             Spacer(Modifier.height(8.dp))
           }
-          itemsIndexed(conversations) { _, conv ->
+          // Show only the last 5 conversations in the drawer
+          itemsIndexed(lastFiveConversations) { _, conv ->
             NavigationDrawerItem(
               label = { Text(conv.title) },
               selected = conv.id == selectedConversationId,
@@ -385,6 +402,16 @@ fun BatuLlmChatScreen(
                 .fillMaxWidth()
                 .focusable()
             )
+          }
+          item { Spacer(Modifier.height(8.dp)) }
+          // Button to open searchable popup for all conversations
+          item {
+            TextButton(
+              onClick = {
+                showAllConversations = true
+              },
+              modifier = Modifier.focusable()
+            ) { Text("All conversations…") }
           }
           item { Spacer(Modifier.height(12.dp)) }
           item {
@@ -450,7 +477,15 @@ fun BatuLlmChatScreen(
     Scaffold(
       topBar = {
         CenterAlignedTopAppBar(
-          title = { Text("Batu Chat") },
+          title = {
+            // Show current chosen model; clicking title opens model selection dialog
+            TextButton(onClick = {
+              ensureModelsLoaded()
+              showModels = true
+            }) {
+              Text(selectedModel)
+            }
+          },
           navigationIcon = {
             // Left hamburger menu (open drawer)
             IconButton(
@@ -464,26 +499,18 @@ fun BatuLlmChatScreen(
           }
           },
           actions = {
-            // Actions dropdown (Models, Questions)
+            // Actions dropdown (Questions, New chat)
             Box {
               IconButton(
                 onClick = { actionsExpanded = !actionsExpanded },
                 modifier = Modifier.focusable()
-              ) { Text("🤖") }
+              ) { Text("⋮") }
               DropdownMenu(expanded = actionsExpanded, onDismissRequest = { actionsExpanded = false }) {
                 DropdownMenuItem(
                   text = { Text("Questions") },
                   onClick = {
                     actionsExpanded = false
                     showQuestions = true
-                  }
-                )
-                DropdownMenuItem(
-                  text = { Text("Models") },
-                  onClick = {
-                    actionsExpanded = false
-                    ensureModelsLoaded()
-                    showModels = true
                   }
                 )
                 DropdownMenuItem(
@@ -754,6 +781,64 @@ fun BatuLlmChatScreen(
                     modifier = Modifier.focusable()
                   ) {
                     Text("＋12")
+                  }
+                }
+              }
+            }
+          )
+        }
+        // Searchable popup for all conversations (like models list)
+        if (showAllConversations) {
+          androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showAllConversations = false },
+            confirmButton = {
+              TextButton(onClick = { showAllConversations = false }, modifier = Modifier.focusable()) { Text("Close") }
+            },
+            title = { Text("All Conversations") },
+            text = {
+              Column(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                  value = convSearchQuery,
+                  onValueChange = { convSearchQuery = it },
+                  singleLine = true,
+                  placeholder = { Text("Search conversations") },
+                  modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(8.dp))
+                val filtered = conversations.filter { c ->
+                  if (convSearchQuery.isBlank()) true
+                  else c.title.contains(convSearchQuery, ignoreCase = true)
+                }
+                LazyColumn(
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .height(320.dp)
+                ) {
+                  itemsIndexed(filtered) { _, conv ->
+                    Row(
+                      verticalAlignment = Alignment.CenterVertically,
+                      modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 6.dp)
+                    ) {
+                      TextButton(
+                        onClick = {
+                          selectedConversationId = conv.id
+                          showAllConversations = false
+                        },
+                        modifier = Modifier.focusable()
+                      ) { Text("Open") }
+                      Spacer(Modifier.width(8.dp))
+                      Text(conv.title, modifier = Modifier.weight(1f))
+                    }
+                    HorizontalDivider()
+                  }
+                  item {
+                    if (filtered.isEmpty()) {
+                      Text("No conversations found")
+                    }
                   }
                 }
               }
