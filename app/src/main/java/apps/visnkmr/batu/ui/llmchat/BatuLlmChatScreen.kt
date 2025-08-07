@@ -357,57 +357,85 @@ fun BatuLlmChatScreen(
     drawerState = drawerState,
     drawerContent = {
       ModalDrawerSheet {
-        Column(
+        // Make left sidebar scrollable and DPAD navigable
+        val drawerListState = rememberLazyListState()
+        LazyColumn(
+          state = drawerListState,
           modifier = Modifier
             .fillMaxHeight()
             .width(280.dp)
             .padding(12.dp)
+            .focusable(true),
+          verticalArrangement = Arrangement.Top
         ) {
-          Text("Conversations", style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
-          Spacer(Modifier.height(8.dp))
-          HorizontalDivider()
-          Spacer(Modifier.height(8.dp))
-          conversations.forEach { conv ->
+          item {
+            Text("Conversations", style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(8.dp))
+          }
+          itemsIndexed(conversations) { _, conv ->
             NavigationDrawerItem(
               label = { Text(conv.title) },
               selected = conv.id == selectedConversationId,
               onClick = { selectedConversationId = conv.id },
-              colors = NavigationDrawerItemDefaults.colors()
+              colors = NavigationDrawerItemDefaults.colors(),
+              modifier = Modifier
+                .fillMaxWidth()
+                .focusable(true)
             )
           }
-          Spacer(Modifier.height(12.dp))
-          TextButton(onClick = {
-            scope.launch {
-              selectedConversationId = repo.newConversation()
-            }
-          }) { Text("New chat") }
-          Spacer(Modifier.height(12.dp))
-          HorizontalDivider()
-          Spacer(Modifier.height(12.dp))
-          Text("Settings", style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
-          Spacer(Modifier.height(8.dp))
-          Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            OutlinedTextField(
-              value = apiKey,
-              onValueChange = { apiKey = it },
-              placeholder = { Text("sk-or-v1-...") },
-              singleLine = true,
-              label = { Text("OpenRouter API Key") },
-              modifier = Modifier.weight(1f)
-            )
-            Spacer(Modifier.width(8.dp))
+          item { Spacer(Modifier.height(12.dp)) }
+          item {
             TextButton(
               onClick = {
-                prefs.edit().putString("openrouter_api_key", apiKey.trim()).apply()
-              }
-            ) { Text("Save") }
+                scope.launch {
+                  selectedConversationId = repo.newConversation()
+                }
+              },
+              modifier = Modifier.focusable(true)
+            ) { Text("New chat") }
           }
-          Spacer(Modifier.height(8.dp))
-          // Secondary trigger for Models inside drawer
-          TextButton(onClick = {
-            ensureModelsLoaded()
-            showModels = true
-          }) { Text("Models") }
+          item {
+            Spacer(Modifier.height(12.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(12.dp))
+            Text("Settings", style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+          }
+          item {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+              OutlinedTextField(
+                value = apiKey,
+                onValueChange = { apiKey = it },
+                placeholder = { Text("sk-or-v1-...") },
+                singleLine = true,
+                label = { Text("OpenRouter API Key") },
+                modifier = Modifier
+                  .weight(1f)
+                  .focusable(true)
+              )
+              Spacer(Modifier.width(8.dp))
+              TextButton(
+                onClick = {
+                  prefs.edit().putString("openrouter_api_key", apiKey.trim()).apply()
+                },
+                modifier = Modifier.focusable(true)
+              ) { Text("Save") }
+            }
+            Spacer(Modifier.height(8.dp))
+          }
+          item {
+            // Secondary trigger for Models inside drawer
+            TextButton(
+              onClick = {
+                ensureModelsLoaded()
+                showModels = true
+              },
+              modifier = Modifier.focusable(true)
+            ) { Text("Models") }
+          }
+          item { Spacer(Modifier.height(24.dp)) }
         }
       }
     }
@@ -418,17 +446,23 @@ fun BatuLlmChatScreen(
           title = { Text("Batu Chat") },
           navigationIcon = {
             // Left hamburger menu (open drawer)
-            IconButton(onClick = {
+            IconButton(
+            onClick = {
               if (showQuestions) showQuestions = false
               scope.launch { drawerState.open() }
-            }) {
-              Icon(Icons.Filled.Menu, contentDescription = "Menu")
-            }
+            },
+            modifier = Modifier.focusable(true)
+          ) {
+            Icon(Icons.Filled.Menu, contentDescription = "Menu")
+          }
           },
           actions = {
             // Actions dropdown (Models, Questions)
             Box {
-              IconButton(onClick = { actionsExpanded = !actionsExpanded }) { Text("🤖") }
+              IconButton(
+                onClick = { actionsExpanded = !actionsExpanded },
+                modifier = Modifier.focusable(true)
+              ) { Text("🤖") }
               DropdownMenu(expanded = actionsExpanded, onDismissRequest = { actionsExpanded = false }) {
                 DropdownMenuItem(
                   text = { Text("Questions") },
@@ -462,7 +496,10 @@ fun BatuLlmChatScreen(
       }
     ) { innerPadding ->
       // Main chat content
-      Box(modifier = modifier.fillMaxSize().padding(innerPadding)) {
+      Box(modifier = modifier
+        .fillMaxSize()
+        .padding(innerPadding)
+        .focusable(true)) {
         // ChatView + input adornments row
         Column(modifier = Modifier
           .fillMaxSize()
@@ -473,6 +510,7 @@ fun BatuLlmChatScreen(
             modifier = Modifier
               .weight(1f)
               .fillMaxWidth()
+              .focusable(true)
           ) {
             // Render messages from repo snapshot for parity and attach action row
             itemsIndexed(messagesInDb) { _, m ->
@@ -487,26 +525,34 @@ fun BatuLlmChatScreen(
               ) {
                 // Actions below bubble
                 Spacer(Modifier.width(4.dp))
-                TextButton(onClick = {
+                TextButton(
+                  onClick = {
                   val cb = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                   cb.setPrimaryClip(android.content.ClipData.newPlainText("message", m.content))
-                }) { Text("⧉") }
+                , modifier = Modifier.focusable(true)
+                ) { Text("⧉") }
                 if (m.role == "user") {
-                  TextButton(onClick = {
+                  TextButton(
+                    onClick = {
                     val conv = selectedConversationId ?: return@TextButton
                     scope.launch {
                       repo.addUserMessage(conv, m.content)
                       onSend(listOf(ChatMessageText(m.content, side = ChatSide.USER)))
                     }
-                  }) { Text("↻") }
-                  TextButton(onClick = {
+                  ,
+                    modifier = Modifier.focusable(true)
+                  ) { Text("↻") }
+                  TextButton(
+                    onClick = {
                     scope.launch {
                       val newId = repo.branchFromMessage(m.id)
                       if (newId > 0) {
                         selectedConversationId = newId
                       }
                     }
-                  }) { Text("⎘") }
+                  ,
+                    modifier = Modifier.focusable(true)
+                  ) { Text("⎘") }
                 }
               }
             }
@@ -522,7 +568,9 @@ fun BatuLlmChatScreen(
             onStopButtonClicked = { onStop() },
             // Render include-history toggle inline on the right side of input via trailing content, if supported.
             // If unsupported, we add a small row under input:
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+              .fillMaxWidth()
+              .focusable(true)
           )
 
           // Row under input: include history toggle + legend for send/reset icons
@@ -533,7 +581,10 @@ fun BatuLlmChatScreen(
               .padding(top = 6.dp)
           ) {
             // Include history toggle
-            TextButton(onClick = { includeHistory = !includeHistory }) {
+            TextButton(
+              onClick = { includeHistory = !includeHistory },
+              modifier = Modifier.focusable(true)
+            ) {
               Text(if (includeHistory) "H✓" else "H")
             }
             Spacer(Modifier.width(8.dp))
@@ -559,6 +610,7 @@ fun BatuLlmChatScreen(
             modifier = Modifier
               .align(Alignment.BottomEnd)
               .padding(12.dp)
+              .focusable(true)
           ) {
             Text(if (!isAtBottom) "↓" else if (autoScroll) "✓" else "✕")
           }
@@ -569,7 +621,7 @@ fun BatuLlmChatScreen(
           androidx.compose.material3.AlertDialog(
             onDismissRequest = { showQuestions = false },
             confirmButton = {
-              TextButton(onClick = { showQuestions = false }) { Text("Close") }
+              TextButton(onClick = { showQuestions = false }, modifier = Modifier.focusable(true)) { Text("Close") }
             },
             title = { Text("Questions in this thread") },
             text = {
@@ -595,12 +647,15 @@ fun BatuLlmChatScreen(
                         .fillMaxWidth()
                         .padding(vertical = 6.dp)
                     ) {
-                      TextButton(onClick = {
+                      TextButton(
+                        onClick = {
                         scope.launch {
                           listState.scrollToItem(idx)
                           showQuestions = false
                         }
-                      }) { Text("▶") }
+                      ,
+                        modifier = Modifier.focusable(true)
+                      ) { Text("▶") }
                       Spacer(Modifier.width(8.dp))
                       Text(msg.content.take(120))
                     }
@@ -616,7 +671,7 @@ fun BatuLlmChatScreen(
           androidx.compose.material3.AlertDialog(
             onDismissRequest = { showModels = false },
             confirmButton = {
-              TextButton(onClick = { showModels = false }) { Text("Close") }
+              TextButton(onClick = { showModels = false }, modifier = Modifier.focusable(true)) { Text("Close") }
             },
             title = { Text("Select Model") },
             text = {
@@ -683,10 +738,13 @@ fun BatuLlmChatScreen(
                 }
                 Spacer(Modifier.height(8.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                  TextButton(onClick = {
+                  TextButton(
+                    onClick = {
                     val filteredSize = filtered.size
                     visibleCount = (visibleCount + 12).coerceAtMost(filteredSize)
-                  }) {
+                  },
+                    modifier = Modifier.focusable(true)
+                  ) {
                     Text("＋12")
                   }
                 }

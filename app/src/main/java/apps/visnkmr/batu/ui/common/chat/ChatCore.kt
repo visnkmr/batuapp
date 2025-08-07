@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -20,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -161,7 +163,10 @@ fun ChatView(
   onResetSessionClicked: () -> Unit,
   showStopButtonInInputWhenInProgress: Boolean,
   onStopButtonClicked: () -> Unit,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  // Optional slots to override button content
+  inputSendTrailingContent: (@Composable () -> Unit)? = null,
+  inputResetTrailingContent: (@Composable () -> Unit)? = null
 ) {
   val scope = rememberCoroutineScope()
   val listState = rememberLazyListState()
@@ -178,41 +183,26 @@ fun ChatView(
           itemsIndexed(viewModel.messages) { _, msg ->
             when (msg) {
               is ChatMessageText -> {
+                // Render a simple text bubble
                 val isUser = msg.side == ChatSide.USER
-                Row(
+                val bg = if (isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+                val fg = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                androidx.compose.foundation.layout.Box(
                   modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 4.dp),
-                  horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
+                  contentAlignment = if (isUser) Alignment.CenterEnd else Alignment.CenterStart
                 ) {
-                  val bubbleColor = if (isUser)
-                    MaterialTheme.customColors.userBubbleBgColor
-                  else
-                    MaterialTheme.customColors.agentBubbleBgColor
-                  val textColor = if (isUser) Color.White else MaterialTheme.colorScheme.onSurface
-                  Column(horizontalAlignment = if (isUser) Alignment.End else Alignment.Start) {
-                    Box(
-                      modifier = Modifier
-                        .background(bubbleColor, shape = MaterialTheme.shapes.medium)
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
-                    ) {
-                      Text(msg.content, color = textColor)
-                    }
-                    // Actions
-                    Row {
-                      IconButton(onClick = { onRunAgainClicked(msg) }) { Text("↻") }
-                    }
+                  androidx.compose.material3.Surface(
+                    color = bg,
+                    shape = MaterialTheme.shapes.medium
+                  ) {
+                    Text(
+                      msg.content,
+                      color = fg,
+                      modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                    )
                   }
-                }
-              }
-              is ChatMessageLoading -> {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
-                  Text("…", modifier = Modifier.padding(8.dp))
-                }
-              }
-              is ChatMessageWarning -> {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
-                  Text(msg.content, color = Color(0xFFB00020))
                 }
               }
               is ChatMessageImage -> {
@@ -223,6 +213,16 @@ fun ChatView(
               is ChatMessageAudioClip -> {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
                   Text("[audio]")
+                }
+              }
+              is ChatMessageLoading -> {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+                  Text("…", color = MaterialTheme.colorScheme.onSurface)
+                }
+              }
+              is ChatMessageWarning -> {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+                  Text(msg.content, color = Color(0xFFB00020))
                 }
               }
             }
@@ -257,14 +257,16 @@ fun ChatView(
                 input = ""
                 scope.launch {
                   // Scroll to bottom after sending
-                  // Best effort; ignore errors if state not laid out yet
                   runCatching { listState.scrollToItem(Int.MAX_VALUE) }
                 }
               }
             }
-          ) { Text("Send") }
+          ) {
+            // Unicode send icon
+            Text("➤")
+          }
         }
-        Button(onClick = onResetSessionClicked, enabled = !viewModel.inProgress) { Text("Reset") }
+        Button(onClick = onResetSessionClicked, enabled = !viewModel.inProgress) { Text("⟲") }
       }
     }
   }
