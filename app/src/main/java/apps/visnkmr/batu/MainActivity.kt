@@ -256,7 +256,7 @@ fun ChatScreen(
                             freeSet.add(id)
                         }
                     }
-                    names.sort()
+                    // names.sort()
                     allModels = names
                     freeModels = freeSet
                     // Reset visible count whenever we load anew
@@ -455,11 +455,13 @@ fun ChatScreen(
                 }
                 Spacer(Modifier.width(8.dp))
                 // App title centered with weight
-                Text(
-                    text = "Batu Chat",
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.weight(1f)
-                )
+                    // Show current chosen model; clicking title opens model selection dialog
+                    TextButton(onClick = {
+                      ensureModelsLoaded()
+                      showModels = true
+                    }) {
+                      Text(selectedModel)
+                    }
                 // Actions dropdown trigger at old model-button position
                 Box {
                     IconButton(onClick = { actionsExpanded = !actionsExpanded }) {
