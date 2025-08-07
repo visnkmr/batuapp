@@ -192,6 +192,7 @@ fun BatuLlmChatScreen(
             val item = data.optJSONObject(i) ?: continue
             val idRaw = item.optString("id")
             if (idRaw.isNullOrBlank()) continue
+            // Preserve default order from API; do NOT sort.
             names.add(idRaw)
             val pricing = item.optJSONObject("pricing")
             val prompt = pricing?.opt("prompt")
@@ -202,7 +203,7 @@ fun BatuLlmChatScreen(
               freeSet.add(idRaw)
             }
           }
-          names.sort()
+          // Do not sort; keep API/default order to reflect release ordering.
           allModels = names
           freeModels = freeSet
           visibleCount = 12
