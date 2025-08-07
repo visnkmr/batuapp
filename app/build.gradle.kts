@@ -40,7 +40,8 @@ android {
         compose = true
     }
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.14"
+        // Update to latest stable Compose Compiler
+        kotlinCompilerExtensionVersion = "1.5.15"
     }
     // Align Kotlin/Javac targets to avoid kapt mismatch
     compileOptions {
@@ -53,21 +54,24 @@ android {
 }
 
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2024.04.01")
+    // Update to latest stable Compose BOM (2025 Q1)
+    val composeBom = platform("androidx.compose:compose-bom:2025.01.00")
     implementation(composeBom)
     androidTestImplementation(composeBom)
 
-    implementation("androidx.core:core-ktx:1.12.0")
-    implementation("androidx.activity:activity-compose:1.8.2")
+    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.animation:animation")
+    implementation("androidx.navigation:navigation-compose:2.8.3")
     // Preview/tooling only for debug
     implementation("androidx.compose.ui:ui-tooling-preview")
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     // Lifecycle + coroutines
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.6")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
     // Room
@@ -76,11 +80,13 @@ dependencies {
     implementation("androidx.room:room-ktx:$roomVersion")
     kapt("androidx.room:room-compiler:$roomVersion")
 
-    // Security crypto for encrypted prefs (keep minimal Tink set via R8)
+    // Security crypto for encrypted prefs (latest stable)
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    implementation("androidx.security:security-crypto-ktx:1.1.0-alpha06")
 
-    // OkHttp (no logging dependency)
+    // OkHttp + logging
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 
     // JSON
     implementation("org.json:json:20240303")

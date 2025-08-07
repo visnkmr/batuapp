@@ -1,4 +1,8 @@
-package apps.visnkmr.batu.ui.theme
+/*
+This file was superseded by apps.visnkmr.batu.ui.theme.BatuGalleryTheme/Type.
+Keeping it causes duplicate JVM class names. Intentionally disabling.
+*/
+package io.github.visnkmr.tvcalendar.ui.theme_disabled
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -34,11 +38,10 @@ fun TVCalendarTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
+    // No-op placeholder to avoid compile errors in disabled package.
     val colors = if (darkTheme) DarkColors else LightColors
     MaterialTheme(
         colorScheme = colors,
-        typography = Typography,
-        shapes = Shapes,
         content = content
     )
 }

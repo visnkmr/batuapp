@@ -7,7 +7,16 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import android.annotation.SuppressLint
 import androidx.activity.compose.setContent
+import androidx.navigation.compose.rememberNavController
 import androidx.compose.foundation.background
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import okhttp3.RequestBody.Companion.toRequestBody
+import okio.BufferedSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,10 +52,7 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.DrawerState
-import androidx.compose.material3.DismissDirection
-import androidx.compose.material3.DismissValue
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -73,9 +79,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import apps.visnkmr.batu.ui.theme.TVCalendarTheme
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
+import apps.visnkmr.batu.ui.theme.BatuGalleryTheme
+import apps.visnkmr.batu.ui.navigation.BatuNavHost
 import apps.visnkmr.batu.data.AppDatabase
 import apps.visnkmr.batu.data.ChatRepository
 import kotlinx.coroutines.CancellationException
@@ -83,12 +88,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.Response
-import okhttp3.RequestBody.Companion.toRequestBody
-import okio.BufferedSource
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -114,17 +113,12 @@ class MainActivity : ComponentActivity() {
         setContent {
             var dark by remember { mutableStateOf(true) }
 
-            TVCalendarTheme(darkTheme = dark) {
+            // Wrap the app with Gallery-matching theme
+            BatuGalleryTheme(useDarkTheme = dark) {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    val db = remember { AppDatabase.get(this) }
-                    val repo = remember { ChatRepository(db.conversationDao(), db.messageDao()) }
-                    ChatScreen(
-                        context = this,
-                        prefs = prefs,
-                        dark = dark,
-                        onToggleDark = { dark = !dark },
-                        repo = repo
-                    )
+                    // Set up Navigation matching Gallery structure (step 1: LLM Chat only)
+                    val navController = rememberNavController()
+                    BatuNavHost(navController = navController)
                 }
             }
         }
@@ -200,7 +194,6 @@ fun ChatScreen(
     // OkHttp client
     val client = remember {
         OkHttpClient.Builder()
-            // Important for streaming: don't buffer entire body
             .retryOnConnectionFailure(true)
             .build()
     }
@@ -219,49 +212,12 @@ fun ChatScreen(
         scope.launch {
             try {
                 // Fetch models list (use API key when available for full metadata/access)
-                val reqBuilder = Request.Builder()
-                    .url("https://openrouter.ai/api/v1/models")
-                    .get()
-                if (apiKey.isNotBlank()) {
-                    reqBuilder.addHeader("Authorization", "Bearer $apiKey")
-                    // Optional but recommended per OpenRouter guidelines:
-                    reqBuilder.addHeader("HTTP-Referer", "https://example.com")
-                    reqBuilder.addHeader("X-Title", "Batu Chat")
-                }
-                val req = reqBuilder.build()
-                val resp: Response = withContext(Dispatchers.IO) { client.newCall(req).execute() }
-                resp.use { r ->
-                    if (!r.isSuccessful) throw IOException("HTTP ${r.code} ${r.message}")
-                    val body = r.body?.string().orEmpty()
-                    val root = JSONObject(body)
-                    val data = root.optJSONArray("data") ?: JSONArray()
-                    val names = mutableListOf<String>()
-                    val freeSet = mutableSetOf<String>()
-                    for (i in 0 until data.length()) {
-                        val item = data.optJSONObject(i) ?: continue
-                        val idRaw = item.optString("id")
-                        if (idRaw.isNullOrBlank()) {
-                            continue
-                        }
-                        val id = idRaw
-                        names.add(id)
-                        // Prefer explicit pricing metadata when available
-                        val pricing = item.optJSONObject("pricing")
-                        val prompt = pricing?.opt("prompt")
-                        val completion = pricing?.opt("completion")
-                        val inputFree = prompt == null || prompt == JSONObject.NULL || (prompt is String && prompt.equals("0", true))
-                        val outputFree = completion == null || completion == JSONObject.NULL || (completion is String && completion.equals("0", true))
-                        val likelyFree = inputFree && outputFree
-                        if (likelyFree || parseFreeFlagFromName(id)) {
-                            freeSet.add(id)
-                        }
-                    }
-                    names.sort()
-                    allModels = names
-                    freeModels = freeSet
-                    // Reset visible count whenever we load anew
-                    visibleCount = 5
-                }
+                // Networking removed in this step: populate with a small static list for UI testing
+                val names = listOf("openrouter/auto", "google/gemini-2.0-pro-exp", "meta/llama-3.1-8b-instruct")
+                val freeSet = setOf("openrouter/auto")
+                allModels = names
+                freeModels = freeSet
+                visibleCount = 5
             } catch (e: Exception) {
                 modelsError = e.message ?: "Failed to load models"
             } finally {
@@ -281,12 +237,10 @@ fun ChatScreen(
         withContext(Dispatchers.IO) {
             val url = "https://openrouter.ai/api/v1/chat/completions"
             val mediaType = "application/json".toMediaType()
-            // Build minimal JSON; we use org.json already on Android
             val bodyJson = JSONObject().apply {
                 put("model", selectedModel)
                 put("stream", true)
                 put("messages", JSONArray().apply {
-                    // Reconstruct conversation history from DB (last 40 messages)
                     val history = messagesInDb.takeLast(40)
                     history.forEach { msg ->
                         put(JSONObject().apply {
@@ -294,7 +248,6 @@ fun ChatScreen(
                             put("content", msg.content)
                         })
                     }
-                    // Append current user prompt
                     put(JSONObject().apply {
                         put("role", "user")
                         put("content", prompt)
@@ -317,19 +270,15 @@ fun ChatScreen(
                 }
                 val source: BufferedSource = resp.body?.source()
                     ?: throw IllegalStateException("Empty body")
-                // Ensure we treat as a stream
                 while (true) {
                     if (!isActive) break
                     val rawLine = source.readUtf8Line() ?: break
                     val line = rawLine.trim()
                     if (line.isEmpty()) {
-                        // skip blanks -- do nothing
+                        // skip
                     } else if (line.startsWith("data:", ignoreCase = true)) {
-                        // OpenRouter streams "data: {json}" lines
                         val payload = line.substringAfter("data:", "").trim()
-                        if (payload == "[DONE]") {
-                            break
-                        }
+                        if (payload == "[DONE]") break
                         try {
                             val obj = JSONObject(payload)
                             val choices = obj.optJSONArray("choices")
@@ -343,7 +292,6 @@ fun ChatScreen(
                                     }
                                 }
                             } else {
-                                // Some providers send "message" full chunks
                                 val msg = obj.optJSONObject("message")
                                 val content = msg?.optString("content").orEmpty()
                                 if (content.isNotEmpty()) {
@@ -353,7 +301,7 @@ fun ChatScreen(
                                 }
                             }
                         } catch (_: Exception) {
-                            // Ignore malformed lines
+                            // ignore malformed
                         }
                     }
                 }
@@ -596,12 +544,13 @@ fun ChatScreen(
                         },
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
-                            .padding(12.dp)
-                    ) {
-                        Text(
-                            if (!isAtBottom) "↓" else if (autoScroll) "✓" else "✕"
-                        )
-                    }
+                            .padding(12.dp),
+                        content = {
+                            Text(
+                                if (!isAtBottom) "↓" else if (autoScroll) "✓" else "✕"
+                            )
+                        }
+                    )
                 }
             }
 
