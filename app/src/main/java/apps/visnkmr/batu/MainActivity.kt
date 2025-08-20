@@ -4,6 +4,8 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.os.Bundle
+import android.content.res.Configuration
+import android.content.pm.PackageManager
 import androidx.activity.ComponentActivity
 import android.annotation.SuppressLint
 import androidx.activity.compose.setContent
@@ -68,6 +70,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -78,6 +81,7 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import apps.visnkmr.batu.data.AppDatabase
 import apps.visnkmr.batu.data.ChatRepository
+import apps.visnkmr.batu.data.Conversation
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
@@ -111,6 +115,11 @@ class MainActivity : ComponentActivity() {
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )
 
+        // Detect if running on TV
+        val isTV = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||
+                   packageManager.hasSystemFeature(PackageManager.FEATURE_TELEVISION) ||
+                   (resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_TELEVISION)
+
         setContent {
             var dark by remember { mutableStateOf(true) }
 
@@ -118,13 +127,26 @@ class MainActivity : ComponentActivity() {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     val db = remember { AppDatabase.get(this) }
                     val repo = remember { ChatRepository(db.conversationDao(), db.messageDao()) }
-                    ChatScreen(
-                        context = this,
-                        prefs = prefs,
-                        dark = dark,
-                        onToggleDark = { dark = !dark },
-                        repo = repo
-                    )
+
+                    if (!isTV) {
+                        // Use TV-optimized interface for TV devices
+                        TVChatScreen(
+                            context = this,
+                            prefs = prefs,
+                            dark = dark,
+                            onToggleDark = { dark = !dark },
+                            repo = repo
+                        )
+                    } else {
+                        // Use regular interface for mobile/tablet
+                        ChatScreen(
+                            context = this,
+                            prefs = prefs,
+                            dark = dark,
+                            onToggleDark = { dark = !dark },
+                            repo = repo
+                        )
+                    }
                 }
             }
         }
@@ -146,8 +168,30 @@ fun ChatScreen(
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     var apiKey by remember { mutableStateOf(prefs.getString("openrouter_api_key", "") ?: "") }
 
-    // Conversations and selection
-    val conversations by repo.conversations().collectAsState(initial = emptyList())
+    // Conversations and selection with pagination
+    val pageSize = 20
+    var currentPage by remember { mutableStateOf(0) }
+    var isLoadingMore by remember { mutableStateOf(false) }
+    var hasMorePages by remember { mutableStateOf(true) }
+
+    val pagedConversations by repo.conversationsPaged(pageSize, currentPage * pageSize).collectAsState(initial = emptyList())
+    val totalCount by repo.conversationsCount().collectAsState(initial = 0)
+
+    // Combine all loaded pages
+    var allConversations by remember { mutableStateOf<List<Conversation>>(emptyList()) }
+
+    // Update all conversations when new page is loaded
+    LaunchedEffect(pagedConversations) {
+        if (currentPage == 0) {
+            allConversations = pagedConversations
+        } else {
+            allConversations = (allConversations + pagedConversations).distinctBy { it.id }
+        }
+        hasMorePages = allConversations.size < totalCount
+        isLoadingMore = false
+    }
+
+    val conversations = allConversations
     var selectedConversationId by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(conversations) {
@@ -179,6 +223,7 @@ fun ChatScreen(
     var searchQuery by remember { mutableStateOf("") }
     var selectedModel by remember { mutableStateOf("openrouter/auto") }
     val listState = rememberLazyListState()
+    val drawerListState = rememberLazyListState()
     // Toggle for including chat history with the current message
     var includeHistory by remember { mutableStateOf(true) }
 
@@ -366,71 +411,96 @@ fun ChatScreen(
         drawerState = drawerState,
         drawerContent = {
             ModalDrawerSheet(
+                modifier = Modifier.width(280.dp)
             ) {
-                Column(
+                LazyColumn(
+                    state = drawerListState,
                     modifier = Modifier
                         .fillMaxHeight()
-                        .width(280.dp)
                         .background(MaterialTheme.colorScheme.surface)
                         .padding(12.dp)
                 ) {
-                Text("Conversations", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(8.dp))
-                IconButton(onClick = {
-                    scope.launch {
-                        selectedConversationId = repo.newConversation()
+                    item {
+                        Text("Conversations", style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.height(8.dp))
                     }
-                }) { Text("＋") }
-                Spacer(Modifier.height(8.dp))
-                Divider()
-                Spacer(Modifier.height(8.dp))
-                conversations.forEach { conv ->
-                    NavigationDrawerItem(
-                        label = { Text(conv.title) },
-                        selected = conv.id == selectedConversationId,
-                        onClick = { selectedConversationId = conv.id },
-                        colors = NavigationDrawerItemDefaults.colors()
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-                Divider()
-                Spacer(Modifier.height(12.dp))
-                Text("Settings", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                ) {
-                    OutlinedTextField(
-                        value = apiKey,
-                        onValueChange = { apiKey = it },
-                        placeholder = { Text("sk-or-v1-...") },
-                        singleLine = true,
-                        label = { Text("OpenRouter API Key") },
-                        modifier = Modifier.weight(1f)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    IconButton(
-                        onClick = {
-                            prefs.edit().putString("openrouter_api_key", apiKey.trim()).apply()
+
+                    item {
+                        IconButton(onClick = {
+                            scope.launch {
+                                val newId = repo.newConversation()
+                                selectedConversationId = newId
+                                // Reset pagination to show the new conversation
+                                currentPage = 0
+                                allConversations = emptyList()
+                            }
+                        }) { Text("＋ New Chat") }
+                        Spacer(Modifier.height(8.dp))
+                    }
+
+                    item {
+                        Text("Settings", style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.height(8.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = apiKey,
+                                onValueChange = { apiKey = it },
+                                placeholder = { Text("sk-or-v1-...") },
+                                singleLine = true,
+                                label = { Text("OpenRouter API Key") },
+                                modifier = Modifier.weight(1f)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            IconButton(
+                                onClick = {
+                                    prefs.edit().putString("openrouter_api_key", apiKey.trim()).apply()
+                                }
+                            ) {
+                                Text("💾")
+                            }
                         }
-                    ) {
-                        Text("💾")
+
+                        Spacer(Modifier.height(12.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                        ) {
+                            IconButton(onClick = onToggleDark) {
+                                Text(if (dark) "☀ Light" else "🌙 dark")
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Divider()
+                        Spacer(Modifier.height(8.dp))
                     }
-                }
-                
-                
-                Spacer(Modifier.height(12.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                ) {
-                    IconButton(onClick = onToggleDark) {
-                        Text(if (dark) "☀ Light" else "🌙 dark")
+
+                    items(conversations) { conv ->
+                        NavigationDrawerItem(
+                            label = { Text(conv.title) },
+                            selected = conv.id == selectedConversationId,
+                            onClick = { selectedConversationId = conv.id },
+                            colors = NavigationDrawerItemDefaults.colors()
+                        )
                     }
-                }
+
+                    // Loading indicator
+                    if (isLoadingMore) {
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Text("Loading more conversations...")
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -766,6 +836,20 @@ fun ChatScreen(
             val last = messagesInDb.size - 1
             listState.scrollToItem(last)
         }
+    }
+
+    // Load more conversations when scrolling near bottom
+    LaunchedEffect(drawerListState) {
+        snapshotFlow { drawerListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
+            .collect { lastVisibleIndex: Int? ->
+                if (lastVisibleIndex != null &&
+                    lastVisibleIndex >= conversations.size - 3 &&
+                    hasMorePages &&
+                    !isLoadingMore) {
+                    isLoadingMore = true
+                    currentPage++
+                }
+            }
     }
 
     if (showModels) {

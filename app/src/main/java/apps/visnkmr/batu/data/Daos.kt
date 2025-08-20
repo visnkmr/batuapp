@@ -18,6 +18,12 @@ interface ConversationDao {
     @Query("SELECT * FROM conversations ORDER BY lastUpdated DESC")
     fun getAll(): Flow<List<Conversation>>
 
+    @Query("SELECT * FROM conversations ORDER BY lastUpdated DESC LIMIT :limit OFFSET :offset")
+    fun getPaged(limit: Int, offset: Int): Flow<List<Conversation>>
+
+    @Query("SELECT COUNT(*) FROM conversations")
+    fun getTotalCount(): Flow<Int>
+
     @Query("SELECT * FROM conversations WHERE id = :id LIMIT 1")
     fun getById(id: Long): Flow<Conversation?>
 

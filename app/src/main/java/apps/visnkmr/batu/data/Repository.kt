@@ -11,6 +11,10 @@ class ChatRepository(
 
     fun conversations(): Flow<List<Conversation>> = conversationDao.getAll()
 
+    fun conversationsPaged(limit: Int, offset: Int): Flow<List<Conversation>> = conversationDao.getPaged(limit, offset)
+
+    fun conversationsCount(): Flow<Int> = conversationDao.getTotalCount()
+
     fun messages(conversationId: Long): Flow<List<Message>> =
         messageDao.getByConversation(conversationId)
 
