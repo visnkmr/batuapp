@@ -79,6 +79,9 @@ dependencies {
     // Security crypto for encrypted prefs (keep minimal Tink set via R8)
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
+    // Navigation Compose
+    implementation("androidx.navigation:navigation-compose:2.7.7")
+
     // OkHttp (no logging dependency)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
