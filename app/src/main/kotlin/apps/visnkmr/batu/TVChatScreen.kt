@@ -63,6 +63,7 @@ object TVRoutes {
     const val HOME = "tv_home"
     const val CHAT = "tv_chat/{conversationId}"
     const val MODEL_SEARCH = "tv_model_search"
+    const val API_KEY_SETTINGS = "tv_api_key_settings"
 
     fun createChatRoute(conversationId: Long) = "tv_chat/$conversationId"
 }
@@ -249,6 +250,9 @@ fun TVChatScreen(
                         onLoadModels = onLoadModelsAction,
                         onNavigateToModelSearch = {
                             navController.navigate(TVRoutes.MODEL_SEARCH)
+                        },
+                        onNavigateToApiKeySettings = {
+                            navController.navigate(TVRoutes.API_KEY_SETTINGS)
                         }
                     )
                 }
@@ -275,8 +279,67 @@ fun TVChatScreen(
                         onModelSelected = { selectedModel = it },
                         onBack = { navController.navigateUp() },
                         onLoadMoreModels = {
-                            // Load more models logic would go here
+                            if (!loadingModels) {
+                                loadingModels = true
+                                scope.launch {
+                                    try {
+                                        val reqBuilder = Request.Builder()
+                                            .url("https://openrouter.ai/api/v1/models")
+                                            .get()
+                                        if (apiKey.isNotBlank()) {
+                                            reqBuilder.addHeader("Authorization", "Bearer $apiKey")
+                                            reqBuilder.addHeader("HTTP-Referer", "https://example.com")
+                                            reqBuilder.addHeader("X-Title", "Batu Chat")
+                                        }
+                                        val req = reqBuilder.build()
+                                        val resp: Response = withContext(Dispatchers.IO) { client.newCall(req).execute() }
+                                        resp.use { r ->
+                                            if (!r.isSuccessful) throw IOException("HTTP ${r.code} ${r.message}")
+                                            val body = r.body?.string().orEmpty()
+                                            val root = JSONObject(body)
+                                            val data = root.optJSONArray("data") ?: JSONArray()
+                                            val names = mutableListOf<String>()
+                                            val freeSet = mutableSetOf<String>()
+                                            for (i in 0 until data.length()) {
+                                                val item = data.optJSONObject(i) ?: continue
+                                                val idRaw = item.optString("id")
+                                                if (idRaw.isBlank()) continue
+                                                val id = idRaw
+                                                names.add(id)
+                                                val pricing = item.optJSONObject("pricing")
+                                                val prompt = pricing?.opt("prompt")
+                                                val completion = pricing?.opt("completion")
+                                                val inputFree = prompt == null || prompt == JSONObject.NULL || (prompt is String && prompt.equals("0", true))
+                                                val outputFree = completion == null || completion == JSONObject.NULL || (completion is String && completion.equals("0", true))
+                                                val likelyFree = inputFree && outputFree
+                                                if (likelyFree) {
+                                                    freeSet.add(id)
+                                                }
+                                            }
+                                            allModels = names
+                                            freeModels = freeSet
+                                        }
+                                    } catch (e: Exception) {
+                                        // Handle error silently for TV
+                                    } finally {
+                                        loadingModels = false
+                                    }
+                                }
+                            }
                         }
+                    )
+                }
+
+                composable(TVRoutes.API_KEY_SETTINGS) {
+                    TVApiKeySettingsScreen(
+                        currentApiKey = apiKey,
+                        onApiKeySaved = { newKey ->
+                            scope.launch {
+                                prefs.edit().putString("openrouter_api_key", newKey).apply()
+                                apiKey = newKey
+                            }
+                        },
+                        onBack = { navController.navigateUp() }
                     )
                 }
             }
@@ -296,7 +359,8 @@ fun TVHomeScreen(
     onConversationSelected: (Long) -> Unit,
     onNewConversation: () -> Unit,
     onLoadModels: () -> Unit,
-    onNavigateToModelSearch: () -> Unit
+    onNavigateToModelSearch: () -> Unit,
+    onNavigateToApiKeySettings: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         // Row 1: Model Selection (Netflix-style cards)
@@ -398,6 +462,44 @@ fun TVHomeScreen(
                     }
                 }
 
+                // API Key Settings card
+                item {
+                    focusableLayout(
+                        modifier = Modifier
+                            .width(200.dp)
+                            .height(120.dp),
+                        isClickable = true,
+                        onClick = {
+                            // Navigate to API key settings screen
+                            onNavigateToApiKeySettings()
+                        }
+                    ) {
+                        Card(
+                            modifier = Modifier.fillMaxSize(),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (apiKey.isNotBlank()) MaterialTheme.colorScheme.primaryContainer
+                                                else MaterialTheme.colorScheme.surface
+                            )
+                        ) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("🔑", fontSize = 32.sp)
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = if (apiKey.isNotBlank()) "API Key Set" else "Set API Key",
+                                        fontSize = 12.sp,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // More Models card
                 if (allModels.size > 6) {
                     item {
@@ -407,8 +509,8 @@ fun TVHomeScreen(
                                 .height(120.dp),
                             isClickable = true,
                             onClick = {
-                                // Show all models in selection dialog
-                                onLoadModels()
+                                // Navigate to model search screen to show all models
+                                onNavigateToModelSearch()
                             }
                         ) {
                             Card(
@@ -796,6 +898,128 @@ fun TVChatDetailScreen(
                 }
             }
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+fun TVApiKeySettingsScreen(
+    currentApiKey: String,
+    onApiKeySaved: (String) -> Unit,
+    onBack: () -> Unit
+) {
+    var apiKeyInput by remember { mutableStateOf(currentApiKey) }
+    val scope = rememberCoroutineScope()
+    var isSaving by remember { mutableStateOf(false) }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Header with back button and title
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            focusableLayout(
+                modifier = Modifier
+                    .width(80.dp)
+                    .height(48.dp),
+                isClickable = true,
+                onClick = onBack
+            ) {
+                OutlinedButton(
+                    onClick = {},
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    Text("← Back")
+                }
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Text("API Key Settings", style = MaterialTheme.typography.titleLarge)
+        }
+
+        // API Key input field
+        focusableLayout(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(120.dp)
+                .padding(horizontal = 16.dp),
+            isClickable = false
+        ) {
+            OutlinedTextField(
+                value = apiKeyInput,
+                onValueChange = { apiKeyInput = it },
+                modifier = Modifier.fillMaxSize(),
+                placeholder = {
+                    Text(
+                        "Enter your OpenRouter API Key...",
+                        style = MaterialTheme.typography.headlineMedium,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                },
+                textStyle = MaterialTheme.typography.headlineMedium.copy(
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                ),
+                singleLine = true,
+                label = { Text("OpenRouter API Key") }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Save button
+        focusableLayout(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(80.dp)
+                .padding(horizontal = 16.dp),
+            isClickable = true,
+            onClick = {
+                if (!isSaving) {
+                    isSaving = true
+                    scope.launch {
+                        try {
+                            onApiKeySaved(apiKeyInput)
+                            kotlinx.coroutines.delay(500) // Brief delay for feedback
+                            onBack() // Navigate back after saving
+                        } catch (e: Exception) {
+                            // Handle error silently
+                        } finally {
+                            isSaving = false
+                        }
+                    }
+                }
+            }
+        ) {
+            Button(
+                onClick = {},
+                modifier = Modifier.fillMaxSize(),
+                enabled = !isSaving
+            ) {
+                if (isSaving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Saving...", style = MaterialTheme.typography.titleMedium)
+                } else {
+                    Text("Save API Key", style = MaterialTheme.typography.titleMedium)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Info text
+        Text(
+            text = "Get your API key from https://openrouter.ai/keys",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
     }
 }
 
