@@ -25,6 +25,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -405,371 +406,6 @@ fun TVHomeScreen(
                                 .width(200.dp)
                                 .height(120.dp),
                             isClickable = true,
-                android.view.KeyEvent.KEYCODE_MENU -> {
-                    showNavbar = !showNavbar
-                    true
-                }
-                else -> false
-            }
-        } else {
-            false
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
-@Composable
-fun TVModelSearchScreen(
-    allModels: List<String>,
-    freeModels: Set<String>,
-    selectedModel: String,
-    onModelSelected: (String) -> Unit,
-    onBack: () -> Unit,
-    onLoadMoreModels: () -> Unit
-) {
-    val searchQuery = remember { mutableStateOf("") }
-    val filteredModels = remember(searchQuery.value, allModels) {
-        if (searchQuery.value.isBlank()) {
-            allModels
-        } else {
-            allModels.filter { it.contains(searchQuery.value, ignoreCase = true) }
-        }
-    }
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            // Header with back button and title
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                focusableLayout(
-                    modifier = Modifier
-                        .width(80.dp)
-                        .height(48.dp),
-                    isClickable = true,
-                    onClick = onBack
-                ) {
-                    OutlinedButton(
-                        onClick = {},
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        Text("← Back")
-                    }
-                }
-                Spacer(modifier = Modifier.width(16.dp))
-                Text("Search Models", style = MaterialTheme.typography.titleLarge)
-            }
-
-            // Search input field
-            focusableLayout(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(80.dp)
-                    .padding(horizontal = 16.dp),
-                isClickable = false
-            ) {
-                OutlinedTextField(
-                    value = searchQuery.value,
-                    onValueChange = { searchQuery.value = it },
-                    modifier = Modifier.fillMaxSize(),
-                    placeholder = {
-                        Text(
-                            "Type to search models...",
-                            style = MaterialTheme.typography.headlineMedium,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                        )
-                    },
-                    textStyle = MaterialTheme.typography.headlineMedium.copy(
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    ),
-                    singleLine = true
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Model results
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(horizontal = 16.dp)
-            ) {
-                items(filteredModels) { model ->
-                    val isFree = freeModels.contains(model)
-                    focusableLayout(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(60.dp),
-                        isClickable = true,
-                        onClick = {
-                            onModelSelected(model)
-                            onBack()
-                        }
-                    ) {
-                        Card(
-                            modifier = Modifier.fillMaxSize(),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (model == selectedModel) MaterialTheme.colorScheme.primaryContainer
-                                                else MaterialTheme.colorScheme.surface
-                            )
-                        ) {
-                            Box(modifier = Modifier.fillMaxSize()) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(16.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text("🤖", fontSize = 20.sp)
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Text(
-                                        text = model,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    if (isFree) {
-                                        Text(
-                                            text = "FREE",
-                                            color = Color(0xFF4CAF50),
-                                            fontSize = 12.sp,
-                                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
-                                        )
-                                    }
-                                }
-
-                                // Selection indicator
-                                if (model == selectedModel) {
-                                    Box(
-                                        modifier = Modifier
-                                            .align(Alignment.TopEnd)
-                                            .background(
-                                                color = MaterialTheme.colorScheme.primary,
-                                                shape = RoundedCornerShape(bottomStart = 8.dp)
-                                            )
-                                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                                    ) {
-                                        Text(
-                                            text = "SELECTED",
-                                            color = Color.White,
-                                            fontSize = 10.sp,
-                                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Load more button
-                if (filteredModels.size >= 5) {
-                    item {
-                        focusableLayout(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(60.dp),
-                            isClickable = true,
-                            onClick = onLoadMoreModels
-                        ) {
-                            OutlinedButton(
-                                onClick = {},
-                                modifier = Modifier.fillMaxSize()
-                            ) {
-                                Text("Load More Models", style = MaterialTheme.typography.titleMedium)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
-@Composable
-fun focusableLayout(
-    modifier: Modifier = Modifier,
-    isClickable: Boolean = false,
-    onClick: () -> Unit = {},
-    content: @Composable () -> Unit
-) {
-    val focusManager = LocalFocusManager.current
-    val requester = remember { FocusRequester() }
-    val focusedState = remember { mutableStateOf(false) }
-    val focused = focusedState.value
-    val interaction = remember { MutableInteractionSource() }
-
-    // Animated values
-    val scale by animateFloatAsState(
-        targetValue = if (focused) 1.05f else 1.0f,
-        animationSpec = tween(durationMillis = 200),
-        label = "scale"
-    )
-
-    val tonalElevation by animateFloatAsState(
-        targetValue = if (focused) 6f else 2f,
-        animationSpec = tween(durationMillis = 200),
-        label = "tonalElevation"
-    )
-
-    val shadowElevation by animateFloatAsState(
-        targetValue = if (focused) 8f else 2f,
-        animationSpec = tween(durationMillis = 200),
-        label = "shadowElevation"
-    )
-
-    androidx.compose.material3.Surface(
-        tonalElevation = tonalElevation.dp,
-        shadowElevation = shadowElevation.dp,
-        shape = RoundedCornerShape(12.dp),
-        color = if (focused) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
-        modifier = if (isClickable) {
-            modifier
-                .onFocusChanged { focusedState.value = it.isFocused }
-                .focusable(true, interactionSource = interaction)
-                .scale(scale)
-                .combinedClickable(
-                    interactionSource = interaction,
-                    indication = null,
-                    onClick = onClick,
-                    onLongClick = onClick
-                )
-        } else {
-            modifier
-                .onFocusChanged { focusedState.value = it.isFocused }
-                .focusable(true, interactionSource = interaction)
-                .scale(scale)
-        }
-    ) {
-        content()
-    }
-}
-
-@Composable
-fun TVHomeScreen(
-    conversations: List<Conversation>,
-    selectedModel: String,
-    allModels: List<String>,
-    freeModels: Set<String>,
-    loadingModels: Boolean,
-    apiKey: String,
-    onModelSelected: (String) -> Unit,
-    onConversationSelected: (Long) -> Unit,
-    onNewConversation: () -> Unit,
-    onLoadModels: () -> Unit,
-    onNavigateToModelSearch: () -> Unit
-) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Row 1: Model Selection (Netflix-style cards)
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(160.dp)
-                .padding(16.dp)
-        ) {
-            Text("Models:", style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(16.dp))
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                items(allModels.take(6)) { model ->
-                    val isFree = freeModels.contains(model)
-                    focusableLayout(
-                        modifier = Modifier
-                            .width(200.dp)
-                            .height(120.dp),
-                        isClickable = true,
-                        onClick = { onModelSelected(model) }
-                    ) {
-                        Card(
-                            modifier = Modifier.fillMaxSize(),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (model == selectedModel) MaterialTheme.colorScheme.primaryContainer
-                                                else MaterialTheme.colorScheme.surface
-                            )
-                        ) {
-                            Box(modifier = Modifier.fillMaxSize()) {
-                                // FREE badge in top-right corner
-                                if (isFree) {
-                                    Box(
-                                        modifier = Modifier
-                                            .align(Alignment.TopEnd)
-                                            .background(
-                                                color = Color(0xFF4CAF50),
-                                                shape = RoundedCornerShape(bottomStart = 8.dp)
-                                            )
-                                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                                    ) {
-                                        Text(
-                                            text = "FREE",
-                                            color = Color.White,
-                                            fontSize = 10.sp,
-                                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
-                                        )
-                                    }
-                                }
-
-                                // Main content
-                                Column(
-                                    modifier = Modifier.align(Alignment.Center),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Text("🤖", fontSize = 32.sp)
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text(
-                                        text = model,
-                                        fontSize = 12.sp,
-                                        maxLines = 2,
-                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Search Models card
-                item {
-                    focusableLayout(
-                        modifier = Modifier
-                            .width(200.dp)
-                            .height(120.dp),
-                        isClickable = true,
-                        onClick = {
-                            // Navigate to model search screen
-                            onNavigateToModelSearch()
-                        }
-                    ) {
-                        Card(
-                            modifier = Modifier.fillMaxSize(),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("🔍", fontSize = 32.sp)
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text("Search", fontSize = 14.sp)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // More Models card
-                if (allModels.size > 6) {
-                    item {
-                        focusableLayout(
-                            modifier = Modifier
-                                .width(200.dp)
-                                .height(120.dp),
-                            isClickable = true,
                             onClick = {
                                 // Show all models in selection dialog
                                 onLoadModels()
@@ -947,6 +583,384 @@ fun TVHomeScreen(
                                         maxLines = 2
                                     )
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+fun TVChatDetailScreen(
+    conversationId: Long,
+    selectedModel: String,
+    apiKey: String,
+    repo: ChatRepository,
+    onBack: () -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    var conversation by remember { mutableStateOf<Conversation?>(null) }
+    var messages by remember { mutableStateOf<List<String>>(emptyList()) }
+    var inputText by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(false) }
+
+    // Load conversation
+    LaunchedEffect(conversationId) {
+        try {
+            conversation = repo.getConversation(conversationId)
+            // Load messages - placeholder for now
+            messages = listOf()
+        } catch (e: Exception) {
+            // Handle error silently for TV
+            conversation = null
+        }
+    }
+
+    TVCalendarTheme(darkTheme = true) {
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Header with back button and title (search-style layout)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    focusableLayout(
+                        modifier = Modifier
+                            .width(80.dp)
+                            .height(48.dp),
+                        isClickable = true,
+                        onClick = onBack
+                    ) {
+                        OutlinedButton(
+                            onClick = {},
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            Text("← Back")
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text("Chat", style = MaterialTheme.typography.titleLarge)
+                }
+
+                // Search-style input field (large, prominent like the model search)
+                focusableLayout(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(80.dp)
+                        .padding(horizontal = 16.dp),
+                    isClickable = true,
+                    onClick = {
+                        // TODO: Show keyboard for input
+                    }
+                ) {
+                    OutlinedTextField(
+                        value = inputText,
+                        onValueChange = { inputText = it },
+                        modifier = Modifier.fillMaxSize(),
+                        placeholder = {
+                            Text(
+                                "Type your message...",
+                                style = MaterialTheme.typography.headlineMedium,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                        },
+                        textStyle = MaterialTheme.typography.headlineMedium.copy(
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        ),
+                        singleLine = true
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Chat results area (using search-style layout with cards)
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 16.dp)
+                ) {
+                    items(messages) { message ->
+                        val isUserMessage = messages.indexOf(message) % 2 == 0
+                        focusableLayout(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(60.dp),
+                            isClickable = false
+                        ) {
+                            Card(
+                                modifier = Modifier.fillMaxSize(),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isUserMessage)
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    else MaterialTheme.colorScheme.surface
+                                )
+                            ) {
+                                Box(modifier = Modifier.fillMaxSize()) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(16.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = if (isUserMessage) "👤" else "🤖",
+                                            fontSize = 20.sp
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Text(
+                                            text = message,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (isLoading) {
+                        item {
+                            focusableLayout(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(60.dp),
+                                isClickable = false
+                            ) {
+                                Card(
+                                    modifier = Modifier.fillMaxSize(),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                                    )
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(16.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(20.dp),
+                                            strokeWidth = 2.dp
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Text(
+                                            text = "AI is thinking...",
+                                            style = MaterialTheme.typography.bodyLarge
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Send button as the last item (like Load More button in search)
+                    item {
+                        focusableLayout(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(60.dp),
+                            isClickable = true,
+                            onClick = {
+                                if (inputText.isNotBlank() && !isLoading) {
+                                    val userMessage = inputText
+                                    inputText = ""
+                                    messages = messages + userMessage
+                                    isLoading = true
+
+                                    // TODO: Send to API and get response
+                                    scope.launch {
+                                        kotlinx.coroutines.delay(2000) // Simulate API call
+                                        messages = messages + "AI Response to: $userMessage"
+                                        isLoading = false
+                                    }
+                                }
+                            }
+                        ) {
+                            OutlinedButton(
+                                onClick = {},
+                                modifier = Modifier.fillMaxSize(),
+                                enabled = inputText.isNotBlank() && !isLoading
+                            ) {
+                                Text("Send Message", style = MaterialTheme.typography.titleMedium)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+fun TVModelSearchScreen(
+    allModels: List<String>,
+    freeModels: Set<String>,
+    selectedModel: String,
+    onModelSelected: (String) -> Unit,
+    onBack: () -> Unit,
+    onLoadMoreModels: () -> Unit
+) {
+    val searchQuery = remember { mutableStateOf("") }
+    val filteredModels = remember(searchQuery.value, allModels) {
+        if (searchQuery.value.isBlank()) {
+            allModels
+        } else {
+            allModels.filter { it.contains(searchQuery.value, ignoreCase = true) }
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Header with back button and title
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                focusableLayout(
+                    modifier = Modifier
+                        .width(80.dp)
+                        .height(48.dp),
+                    isClickable = true,
+                    onClick = onBack
+                ) {
+                    OutlinedButton(
+                        onClick = {},
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        Text("← Back")
+                    }
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Text("Search Models", style = MaterialTheme.typography.titleLarge)
+            }
+
+            // Search input field
+            focusableLayout(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(80.dp)
+                    .padding(horizontal = 16.dp),
+                isClickable = false
+            ) {
+                OutlinedTextField(
+                    value = searchQuery.value,
+                    onValueChange = { searchQuery.value = it },
+                    modifier = Modifier.fillMaxSize(),
+                    placeholder = {
+                        Text(
+                            "Type to search models...",
+                            style = MaterialTheme.typography.headlineMedium,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    },
+                    textStyle = MaterialTheme.typography.headlineMedium.copy(
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    ),
+                    singleLine = true
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Model results
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(horizontal = 16.dp)
+            ) {
+                items(filteredModels) { model ->
+                    val isFree = freeModels.contains(model)
+                    focusableLayout(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(60.dp),
+                        isClickable = true,
+                        onClick = {
+                            onModelSelected(model)
+                            onBack()
+                        }
+                    ) {
+                        Card(
+                            modifier = Modifier.fillMaxSize(),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (model == selectedModel) MaterialTheme.colorScheme.primaryContainer
+                                                else MaterialTheme.colorScheme.surface
+                            )
+                        ) {
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("🤖", fontSize = 20.sp)
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(
+                                        text = model,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    if (isFree) {
+                                        Text(
+                                            text = "FREE",
+                                            color = Color(0xFF4CAF50),
+                                            fontSize = 12.sp,
+                                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                                        )
+                                    }
+                                }
+
+                                // Selection indicator
+                                if (model == selectedModel) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .background(
+                                                color = MaterialTheme.colorScheme.primary,
+                                                shape = RoundedCornerShape(bottomStart = 8.dp)
+                                            )
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Text(
+                                            text = "SELECTED",
+                                            color = Color.White,
+                                            fontSize = 10.sp,
+                                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Load more button
+                if (filteredModels.size >= 5) {
+                    item {
+                        focusableLayout(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(60.dp),
+                            isClickable = true,
+                            onClick = onLoadMoreModels
+                        ) {
+                            OutlinedButton(
+                                onClick = {},
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                Text("Load More Models", style = MaterialTheme.typography.titleMedium)
                             }
                         }
                     }
